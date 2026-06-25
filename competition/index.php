@@ -1,205 +1,126 @@
 <?php
-// 1. Include your database connection file
-// This makes the $conn variable available on this page
-require_once 'database.php'; 
+session_start();
 
-$competitions = [];
-
-try {
-    $query = "SELECT competition_name, category, deadline, status, description
-              FROM competitions
-              ORDER BY FIELD(status, 'OPEN', 'UPCOMING', 'CLOSED'), deadline ASC
-              LIMIT 4";
-    $result = mysqli_query($conn, $query);
-
-    while ($row = mysqli_fetch_assoc($result)) {
-        $competitions[] = $row;
-    }
-} catch (mysqli_sql_exception $e) {
-    error_log("Public Competitions Fetch Error: " . $e->getMessage());
+// 1. Dapatkan nama group daripada URL parameter atau nama folder semasa
+if (!isset($_GET['group'])) {
+    $group = basename(dirname(__FILE__));
+} else {
+    $group = preg_replace('/[^a-zA-Z0-9]/', '', $_GET['group']);
 }
+
+// 2. Panggil db.php (Naik 2 tingkat ke atas untuk ke folder 'All')
+include '../../db.php'; 
+
+// 3. Ambil data full_name dan matric_no sahaja menggunakan INNER JOIN
+$members = [];
+$sql = "SELECT S.full_name, S.matric_no FROM stu S 
+        JOIN groupdb G ON S.group_no = G.groupID 
+        WHERE G.groupID = ?";
+
+if ($stmt = $conn->prepare($sql)) {
+    $stmt->bind_param("s", $group);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    while ($row = $result->fetch_assoc()) {
+        $members[] = $row;
+    }
+    $stmt->close();
+}
+$conn->close(); 
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ms">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome to the Competition Arena</title>
-    <link rel="stylesheet" href="css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>Senarai Ahli Kumpulan | <?php echo htmlspecialchars($group); ?></title>
     <style>
-        body {
-            min-height: 100vh;
-            margin: 0;
-            background: #f3e8ff;
-            color: #1f1230;
-            font-family: Arial, sans-serif;
-        }
+        body { background: #0f0f0f; color: white; font-family: sans-serif; padding: 40px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 40px; }
+        
+        /* Gaya reka bentuk jadual (Table Styling) */
+        .table-container { border: 1px solid #444; border-radius: 12px; overflow: hidden; background: rgba(255,255,255,0.02); }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        
+        /* FONT SIZE BESAR: Saiz padding dan font th & td dibesarkan */
+        th, td { padding: 22px 30px; border-bottom: 1px solid #333; font-size: 1.3rem; }
+        th { background: #161616; color: #00d2ff; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 1px; }
+        
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: rgba(255,255,255,0.04); transition: 0.2s; }
+        
+        /* Memastikan jika ada data XXXXX yang panjang, ia tidak melimpah keluar */
+        .text-break { word-break: break-all; line-height: 1.5; font-size: 1.35rem; font-weight: 500; }
+        .matrix-code { color: #00d2ff; font-weight: bold; font-family: monospace; font-size: 1.4rem; }
+        .bil-col { font-size: 1.3rem; font-weight: bold; }
+        
+        /* Button Styles */
+        .btn-back { display: inline-block; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; background: #555; color: white; transition: 0.3s; margin-top: 40px; font-size: 1.1rem; }
+        .btn-back:hover { background: #666; }
 
-        .navbar {
-            background: #ffffff;
-            box-shadow: 0 4px 18px rgba(107, 33, 168, 0.08);
+        /* NEW STYLE: Customized project link button to match Madam's styling */
+        .btn-project { 
+            display: inline-block; 
+            padding: 14px 30px; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            background: #00d2ff; 
+            color: #0f0f0f; 
+            transition: 0.3s; 
+            margin-top: 40px; 
+            margin-left: 15px; 
+            font-size: 1.1rem; 
         }
-
-        .brand {
-            color: #6b21a8;
-            font-weight: 800;
-            letter-spacing: 0;
-        }
-
-        .nav-link {
-            color: #4b5563;
-            font-weight: 600;
-        }
-
-        .nav-link:hover {
-            color: #6b21a8;
-        }
-
-        .hero {
-            min-height: 520px;
-            background:
-                linear-gradient(90deg, rgba(31, 18, 48, 0.88), rgba(107, 33, 168, 0.58)),
-                url('images/leftbg.png') center / cover no-repeat;
-            color: white;
-            display: flex;
-            align-items: center;
-        }
-
-        .hero h1 {
-            max-width: 780px;
-            font-size: clamp(2.25rem, 5vw, 4.5rem);
-            font-weight: 800;
-            line-height: 1.05;
-        }
-
-        .hero p {
-            max-width: 560px;
-            color: rgba(255, 255, 255, 0.86);
-            font-size: 1.1rem;
-        }
-
-        .btn-purple {
-            background: #6b21a8;
-            color: #fff;
-            border: 0;
-            font-weight: 700;
-            padding: 0.8rem 1.5rem;
-        }
-
-        .btn-purple:hover {
-            background: #581c87;
-            color: #fff;
-        }
-
-        .section-title {
-            color: #2d1745;
-            font-weight: 800;
-        }
-
-        .competition-card {
-            border: 0;
-            border-radius: 8px;
-            box-shadow: 0 8px 24px rgba(88, 28, 135, 0.08);
-            height: 100%;
-        }
-
-        .competition-card .card-body {
-            padding: 1.5rem;
-        }
-
-        footer {
-            color: #6b7280;
-        }
-
-        .portal-actions .btn {
-            font-weight: 700;
-            padding: 0.7rem 1.15rem;
+        .btn-project:hover { 
+            background: #00b2d6; 
+            box-shadow: 0 0 15px rgba(0, 210, 255, 0.4); 
         }
     </style>
-    <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg">
-        <div class="container py-2">
-            <a class="navbar-brand brand" href="index.php">CompeteDBMS</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="mainNav">
-                <div class="navbar-nav ms-auto gap-lg-3">
-                    <a class="nav-link" href="index.php">Home</a>
-                    <a class="nav-link" href="#competitions">Competitions</a>
-                    <div class="d-lg-flex gap-2 ms-lg-2 portal-actions">
-                        <a class="btn btn-purple btn-sm" href="student_login.php">
-                            <i class="fa-solid fa-user-graduate me-1"></i> Student Portal
-                        </a>
-                        <a class="btn btn-outline-dark btn-sm" href="login.php">
-                            <i class="fa-solid fa-user-shield me-1"></i> Admin Portal
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </nav>
 
-    <main>
-        <section class="hero">
-            <div class="container py-5">
-                <h1>Welcome to the Ultimate Competition Platform</h1>
-                <p class="mt-3 mb-4">Join ongoing challenges, showcase your skills, and climb the leaderboard.</p>
-                <div class="d-flex flex-wrap gap-3 portal-actions">
-                    <a href="student_login.php" class="btn btn-purple rounded-pill">
-                        <i class="fa-solid fa-user-graduate me-1"></i> Student Portal
-                    </a>
-                    <a href="login.php" class="btn btn-light rounded-pill">
-                        <i class="fa-solid fa-user-shield me-1"></i> Admin Portal
-                    </a>
-                </div>
-            </div>
-        </section>
+<div class="header">
+    <h1>SENARAI AHLI KUMPULAN</h1>
+    <div style="border: 1px solid #00d2ff; padding: 10px 25px; font-size: 1.6rem; border-radius: 5px; font-weight: bold;">
+        GROUP: <?php echo htmlspecialchars($group); ?>
+    </div>
+</div>
 
-        <section class="py-5" id="competitions">
-            <div class="container">
-                <div class="d-flex align-items-center justify-content-between mb-4">
-                    <h2 class="section-title m-0">Active Competitions</h2>
-                </div>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 100px;">BIL</th>
+                <th>NAMA PENUH</th>
+                <th style="width: 350px;">NO. MATRIK</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if (empty($members)): ?>
+                <tr>
+                    <td colspan="3" style="text-align: center; color: #ff4444; padding: 40px; font-size: 1.4rem;">
+                        Tiada data ahli kumpulan ditemui untuk kod group "<?php echo htmlspecialchars($group); ?>".
+                    </td>
+                </tr>
+            <?php else: ?>
+                <?php foreach ($members as $index => $row): ?>
+                    <tr>
+                        <td class="bil-col"><?php echo $index + 1; ?></td>
+                        <td class="text-break" style="text-transform: uppercase;"><?php echo htmlspecialchars($row['full_name']); ?></td>
+                        <td class="matrix-code"><?php echo htmlspecialchars($row['matric_no'] ?? '-'); ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </tbody>
+    </table>
+</div>
 
-                <div class="row g-4">
-                    <?php if (empty($competitions)): ?>
-                        <div class="col-12">
-                            <div class="card competition-card">
-                                <div class="card-body text-muted">No competitions are available yet.</div>
-                            </div>
-                        </div>
-                    <?php endif; ?>
+<!-- Navigation Controls at the bottom -->
+<a href="../../dashboard.php?group=<?php echo urlencode($group); ?>" class="btn-back">BACK TO DASHBOARD</a>
 
-                    <?php foreach ($competitions as $competition): ?>
-                        <div class="col-md-6">
-                            <div class="card competition-card">
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between gap-3 mb-2">
-                                        <h3 class="h4 fw-bold mb-0"><?php echo htmlspecialchars($competition['competition_name']); ?></h3>
-                                        <span class="badge bg-secondary align-self-start"><?php echo htmlspecialchars($competition['status']); ?></span>
-                                    </div>
-                                    <div class="text-muted small mb-3"><?php echo htmlspecialchars($competition['category']); ?> &middot; Deadline <?php echo htmlspecialchars(date('d M Y', strtotime($competition['deadline']))); ?></div>
-                                    <p class="text-muted mb-4"><?php echo htmlspecialchars($competition['description'] ?? ''); ?></p>
-                                    <a href="login.php" class="btn btn-outline-dark rounded-pill">View Details</a>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-        </section>
-    </main>
+<!-- LINK TO YOUR PROJECT: Replace 'your_project_folder/index.php' with your actual relative path -->
+<a href="your_project_folder/index.php" class="btn-project">LAUNCH GROUP PROJECT</a>
 
-    <footer class="py-4 bg-white">
-        <div class="container small">
-            &copy; <?php echo date("Y"); ?> Competition Portal. All rights reserved.
-        </div>
-    </footer>
-
-    <script src="js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
